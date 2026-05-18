@@ -205,6 +205,12 @@ public class SolarPowerTowerBlockEntity extends BlockEntity
             cachedMirrorCount = isSunActive() ? scanMirrors() : 0;
         }
 
+        if (width < 3 || height < 3) {
+            saltAccumulator = 0f;
+            setLit(false);
+            return;
+        }
+
         if (!isSunActive()) {
             saltAccumulator = 0f;
             setLit(false);
@@ -212,10 +218,12 @@ public class SolarPowerTowerBlockEntity extends BlockEntity
         }
 
         float efficiency = mirrorEfficiency();
-        // Rate = footprintArea × (heightFraction) × efficiency
-        // At max size and 100% mirrors: 9 mB/tick — exactly enough for a max 3×3 superheated boiler.
+        // Rate scales super-linearly with height (exponent 1.5) so taller towers are
+        // always more block-efficient than multiple short ones.
+        // At max size (3×3×20) and 100% mirrors: 9 mB/tick.
         int maxH = switch (width) { case 2 -> MAX_HEIGHTS[2]; case 3 -> MAX_HEIGHTS[3]; default -> MAX_HEIGHTS[1]; };
-        float rate = (width * width) * ((float) height / maxH) * efficiency;
+        float heightFraction = (float) height / maxH;
+        float rate = (width * width) * (float) Math.pow(heightFraction, 1.5) * efficiency;
         saltAccumulator += rate;
 
         int saltToAdd = (int) saltAccumulator;
@@ -265,10 +273,11 @@ public class SolarPowerTowerBlockEntity extends BlockEntity
     }
 
     // Triangle curve: ramps 0→100% up to the optimal mirror count, then falls back to 0% at 2× optimal.
-    // Optimal = tower perimeter × height (4 × width × height mirrors).
+    // Optimal = 2 × width × height (~half the directly-adjacent wall faces).
+    // Filling every adjacent face tips into over-mirroring territory.
     private float mirrorEfficiency() {
         if (cachedMirrorCount == 0) return 0f;
-        int optimal = 4 * width * height;
+        int optimal = 2 * width * height;
         float ratio = cachedMirrorCount / (float) optimal;
         return ratio <= 1f ? ratio : Math.max(0f, 2f - ratio);
     }
